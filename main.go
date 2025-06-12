@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/swarajzz/rss-agg/internal/config"
 	"github.com/swarajzz/rss-agg/internal/database"
 
 	_ "github.com/lib/pq"
@@ -41,6 +43,18 @@ func main() {
 	apiCfg := apiConfig{
 		DB: db,
 	}
+
+	cfg, err := config.Read()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Loaded config: %+v\n", cfg)
+
+	err = cfg.SetUser("Nikhil")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Loaded config: %+v\n", cfg)
 
 	go startScraping(db, 10, time.Minute)
 

@@ -18,7 +18,45 @@ import (
 )
 
 type apiConfig struct {
-	DB *database.Queries
+	DB     *database.Queries
+	config *config.Config
+}
+
+type command struct {
+	name      string
+	arguments []string
+}
+
+type commands struct {
+	validCommands map[string]func(*apiConfig, command) error
+}
+
+func handlerLogin(s *apiConfig, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		err := fmt.Errorf("username is required")
+		fmt.Println(err)
+		return err
+	}
+
+	name := cmd.arguments[0]
+	err := s.config.SetUser(name)
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+	fmt.Printf("User %v has been set", name)
+	return nil
+}
+
+func (c *commands) run(s *apiConfig, cmd command) error {
+	if handler, ok := c.validCommands[cmd.name]; ok {
+		return handler(s, cmd)
+	}
+	return fmt.Errorf("invalid command: %s", cmd.name)
+}
+
+func (c *commands) register(name string, f func(*apiConfig, command) error) {
+	c.validCommands[name] = f
 }
 
 func main() {
@@ -39,22 +77,43 @@ func main() {
 		log.Fatal("Can't connect to database", err)
 	}
 
-	db := database.New(conn)
-	apiCfg := apiConfig{
-		DB: db,
+	if len(os.Args) < 2 {
+		fmt.Println("No command provided.")
+		os.Exit(1)
 	}
+
+	fmt.Println(os.Args)
+
+	cmdName := os.Args[1]
+	cmdArgs := os.Args[2:]
 
 	cfg, err := config.Read()
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Loaded config: %+v\n", cfg)
 
-	err = cfg.SetUser("Nikhil")
-	if err != nil {
-		log.Fatal(err)
+	db := database.New(conn)
+	apiCfg := apiConfig{
+		DB:     db,
+		config: &cfg,
 	}
-	fmt.Printf("Loaded config: %+v\n", cfg)
+
+	cmds := &commands{
+		validCommands: make(map[string]func(*apiConfig, command) error),
+	}
+
+	cmds.register("login", handlerLogin)
+
+	cmd := command{
+		name:      cmdName,
+		arguments: cmdArgs,
+	}
+
+	err = cmds.run(&apiCfg, cmd)
+	if err != nil {
+		fmt.Println("Error:", err)
+		os.Exit(1)
+	}
 
 	go startScraping(db, 10, time.Minute)
 

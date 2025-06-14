@@ -58,8 +58,6 @@ func (c *Config) SetUser(name string) error {
 	}
 	defer file.Close()
 
-	fmt.Println(file)
-
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 

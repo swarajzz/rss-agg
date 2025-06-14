@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/swarajzz/rss-agg/internal/config"
 	"github.com/swarajzz/rss-agg/internal/database"
@@ -34,17 +36,53 @@ type commands struct {
 func handlerLogin(s *apiConfig, cmd command) error {
 	if len(cmd.arguments) == 0 {
 		err := fmt.Errorf("username is required")
-		fmt.Println(err)
 		return err
 	}
 
 	name := cmd.arguments[0]
-	err := s.config.SetUser(name)
-	if err != nil {
-		log.Fatal(err)
+
+	if _, ok := s.DB.GetUserByName(context.Background(), name); ok != nil {
+		log.Fatalf("user %v not found", name)
+	}
+
+	s.config.SetUser(name)
+	fmt.Printf("User %v is logged in\n", name)
+	return nil
+}
+
+func handlerRegister(s *apiConfig, cmd command) error {
+	if len(cmd.arguments) == 0 {
+		err := fmt.Errorf("name is required")
 		return err
 	}
-	fmt.Printf("User %v has been set", name)
+
+	name := cmd.arguments[0]
+
+	user, err := s.DB.CreateUser(context.Background(), database.CreateUserParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Name:      name,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s.config.SetUser(user.Name)
+
+	fmt.Println("Username" + name + "successfully registered")
+	return nil
+}
+
+func handlerUsers(s *apiConfig, cmd command) error {
+	users, err := s.DB.GetUsers(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, user := range users {
+		fmt.Println(user.Name)
+	}
 	return nil
 }
 
@@ -82,8 +120,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println(os.Args)
-
 	cmdName := os.Args[1]
 	cmdArgs := os.Args[2:]
 
@@ -103,6 +139,8 @@ func main() {
 	}
 
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
+	cmds.register("users", handlerUsers)
 
 	cmd := command{
 		name:      cmdName,
